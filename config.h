@@ -75,6 +75,12 @@
     #define CONTROLLER_UART_TX       27
     #define CONTROLLER_UART_RX       22
 
+    // Unused IO Expander pins
+    #define CONTROLLER_IO_EXPANDER_TYPE -1
+    #define I2C_SDA -1
+    #define I2C_SCL -1
+    #define IO_EXPANDER_ADDRESS -1
+
     // Selects what GPIO pin to use to output audio through
     // 0 = GPIO25, 1 = GPIO26
     #define DAC_PIN                  0

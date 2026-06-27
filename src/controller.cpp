@@ -1,14 +1,115 @@
 #include "controller.h"
 #include "../config.h"
-#include "../runtime_config.h"
+#include "../hwconfig.h"
 #include "core/bus.h"
 #include <Arduino.h>
 
-extern RuntimeConfig runtime_config;
+extern HWConfig hw_config;
 static uint8_t (*_controllerRead)() = nullptr;
+
+static SemaphoreHandle_t i2c_mutex = NULL;
+
+// --- Bit-bang I2C Implementation ---
+static void i2c_sda_hi() { pinMode(I2C_SDA, INPUT_PULLUP); }
+static void i2c_sda_lo() { digitalWrite(I2C_SDA, LOW); pinMode(I2C_SDA, OUTPUT); }
+static void i2c_scl_hi() { pinMode(I2C_SCL, INPUT_PULLUP); delayMicroseconds(2); }
+static void i2c_scl_lo() { digitalWrite(I2C_SCL, LOW); pinMode(I2C_SCL, OUTPUT); delayMicroseconds(2); }
+
+static void i2c_start() {
+    i2c_sda_hi(); i2c_scl_hi();
+    i2c_sda_lo(); delayMicroseconds(2);
+    i2c_scl_lo();
+}
+
+static void i2c_stop() {
+    i2c_sda_lo(); i2c_scl_hi();
+    i2c_sda_hi(); delayMicroseconds(2);
+}
+
+static bool i2c_write(uint8_t byte) {
+    for (int i = 0; i < 8; i++) {
+        if (byte & 0x80) i2c_sda_hi(); else i2c_sda_lo();
+        i2c_scl_hi(); i2c_scl_lo();
+        byte <<= 1;
+    }
+    i2c_sda_hi();
+    i2c_scl_hi();
+    bool ack = (digitalRead(I2C_SDA) == LOW);
+    i2c_scl_lo();
+    return ack;
+}
+
+static uint8_t i2c_read(bool ack) {
+    uint8_t byte = 0;
+    i2c_sda_hi();
+    for (int i = 0; i < 8; i++) {
+        i2c_scl_hi();
+        if (digitalRead(I2C_SDA)) byte |= (1 << (7 - i));
+        i2c_scl_lo();
+    }
+    if (ack) i2c_sda_lo(); else i2c_sda_hi();
+    i2c_scl_hi(); i2c_scl_lo();
+    i2c_sda_hi();
+    return byte;
+}
+
+static uint8_t IOExpanderControllerRead()
+{
+    static uint8_t last_good_state = 0x00;
+    uint8_t state = 0x00;
+    uint16_t buttons = 0xFFFF;
+    bool success = false;
+
+#if CONTROLLER_IO_EXPANDER_TYPE == 0 // MCP23017
+    i2c_start();
+    if (i2c_write(IO_EXPANDER_ADDRESS << 1)) {
+        i2c_write(0x12); // GPIOA
+        i2c_start(); // Repeated start
+        i2c_write((IO_EXPANDER_ADDRESS << 1) | 1);
+        buttons = i2c_read(false);
+        success = true;
+    }
+    i2c_stop();
+#elif CONTROLLER_IO_EXPANDER_TYPE == 1 // PCF8575
+    i2c_start();
+    if (i2c_write((IO_EXPANDER_ADDRESS << 1) | 1)) {
+        buttons = i2c_read(true);
+        buttons |= (i2c_read(false) << 8);
+        success = true;
+    }
+    i2c_stop();
+#endif
+
+    if (!success) return last_good_state;
+
+    // Mapping: bit 0: Left, bit 1: Right, bit 2: Up, bit 3: Down
+    // bit 4: A, bit 5: B, bit 6: Select, bit 7: Start
+    if (!(buttons & (1 << 0))) state |= (uint8_t)CONTROLLER::Left;
+    if (!(buttons & (1 << 1))) state |= (uint8_t)CONTROLLER::Right;
+    if (!(buttons & (1 << 2))) state |= (uint8_t)CONTROLLER::Up;
+    if (!(buttons & (1 << 3))) state |= (uint8_t)CONTROLLER::Down;
+    if (!(buttons & (1 << 4))) state |= (uint8_t)CONTROLLER::A;
+    if (!(buttons & (1 << 5))) state |= (uint8_t)CONTROLLER::B;
+    if (!(buttons & (1 << 6))) state |= (uint8_t)CONTROLLER::Start;
+    if (!(buttons & (1 << 7))) state |= (uint8_t)CONTROLLER::Select;
+
+    last_good_state = state;
+    return state;
+}
+// ------------------------------------
 
 uint8_t controllerRead()
 {
+    if (!_controllerRead) return 0;
+    
+    if (_controllerRead == IOExpanderControllerRead) {
+        if (i2c_mutex && xSemaphoreTake(i2c_mutex, portMAX_DELAY)) {
+            uint8_t state = _controllerRead();
+            xSemaphoreGive(i2c_mutex);
+            return state;
+        }
+        return 0;
+    }
     return _controllerRead();
 }
 
@@ -228,55 +329,34 @@ static uint8_t PSXControllerRead()
     return state;
 }
 
-static bool UartProcessPacket(HardwareSerial& port, uint8_t& buttons_state)
-{
-    // a packet is three bytes: START_BYTE, buttons_state, and checksum
-    // up, down, left, and right pressed at the same time is impossible on a controller,
-    // so 0b1111000 (0xF0) makes a good start byte since the buttons state byte can
-    // never be 0xF0
-    const uint8_t START_BYTE = 0xF0;
-
-    if (port.available() < 3) return false;
-
-    if (port.read() != START_BYTE) return false;
-
-    if (!port.available()) return false;
-    uint8_t buttons_state_new = port.read();
-
-    if (!port.available()) return false;
-    uint8_t checksum = port.read();
-
-    if (checksum != buttons_state_new) return false;
-
-    buttons_state = buttons_state_new;
-    return true;
-}
-
 static uint8_t UartControllerRead()
 {
-    constexpr uint8_t no_data_limit = 10;
+    static uint8_t state = 0x00;
     static uint8_t no_data_count = 0;
 
-    // UartProcessPacket() only updates buttons_state if successful
-    static uint8_t buttons_state0 = 0x00;
-    static uint8_t buttons_state1 = 0x00;
-    bool success0 = UartProcessPacket(Serial, buttons_state0);
-    bool success1 = UartProcessPacket(Serial1, buttons_state1);
-
-    if (success0 || success1) { no_data_count = 0; }
-    else if (no_data_count < no_data_limit)
+    int b0 = Serial.read();
+    int b1 = Serial1.read();
+    if (b0 >= 0 || b1 >= 0)
     {
-        // if there is no data, then output previous data 10 times before
-        // returning 0x00 (no buttons pressed)
-        no_data_count++;
-        if (no_data_count >= no_data_limit)
-        {
-            buttons_state0 = 0x00;
-            buttons_state1 = 0x00;
-        }
+        // if received button presses from both Serial and Serial1 combine them
+        state = 0x00;
+        if (b0 >= 0) state = (uint8_t)b0;
+        if (b1 >= 0) state |= (uint8_t)b1;
+
+        no_data_count = 0;
+        return state;
     }
 
-    return buttons_state0 | buttons_state1;
+    // if there is no data, then  reuse previous state 10 times before
+    // setting state to 0x00 (no buttons pressed)
+    no_data_count++;
+    if (no_data_count >= 10)
+    {
+        state = 0x00;
+        no_data_count = 10; // pin at 10 to prevent overflow
+    }
+
+    return state;
 }
 
 static uint8_t dummyControllerRead()
@@ -345,10 +425,6 @@ void initController(ControllerType controller_type)
         // states sent from a WebSerial game controller webpage over USB to serial.
         // debug messages will remain off
         Serial.begin(115200);
-
-        // Discard garbage from serial buffer that can be read as false button presses
-        delay(10);
-        while (Serial.available() > 0) { Serial.read(); }
 #endif
 
         // Serial1 is used by an adapter board that supports multiple controller types and
@@ -358,8 +434,39 @@ void initController(ControllerType controller_type)
         Serial1.begin(115200, SERIAL_8N1, CONTROLLER_UART_RX, CONTROLLER_UART_TX);
         delay(200); // allow controller adapter to finish booting
 
-        Serial1.write(runtime_config.controller_type);
+        Serial1.write(hw_config.controller_type);
         _controllerRead = UartControllerRead;
+        break;
+    case CT_IO_EXPANDER:
+        if (i2c_mutex == NULL) {
+            i2c_mutex = xSemaphoreCreateMutex();
+        }
+        i2c_sda_hi();
+        i2c_scl_hi();
+        delay(10);
+#if CONTROLLER_IO_EXPANDER_TYPE == 0 // MCP23017
+        i2c_start();
+        if (i2c_write(IO_EXPANDER_ADDRESS << 1)) {
+            i2c_write(0x00); // IODIRA
+            i2c_write(0xFF);
+            i2c_stop();
+            i2c_start();
+            i2c_write(IO_EXPANDER_ADDRESS << 1);
+            i2c_write(0x0C); // GPPUA
+            i2c_write(0xFF);
+            i2c_stop();
+        } else {
+            i2c_stop();
+        }
+#elif CONTROLLER_IO_EXPANDER_TYPE == 1 // PCF8575
+        i2c_start();
+        if (i2c_write(IO_EXPANDER_ADDRESS << 1)) {
+            i2c_write(0xFF);
+            i2c_write(0xFF);
+        }
+        i2c_stop();
+#endif
+        _controllerRead = IOExpanderControllerRead;
         break;
     case CT_NC:
     default: _controllerRead = dummyControllerRead; break;

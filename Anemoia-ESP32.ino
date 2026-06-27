@@ -149,8 +149,10 @@ IRAM_ATTR void emulate()
     TaskHandle_t apu_task_handle;
     xTaskCreatePinnedToCore(apuTask, "APU Task", 1024, &nes.cpu.apu, 1, &apu_task_handle, 0);
 
+#if CONTROLLER_TYPE != CT_IO_EXPANDER
     TaskHandle_t polling_task_handle;
     xTaskCreatePinnedToCore(pollingTask, "Polling Task", 1024, &nes, 1, &polling_task_handle, 0);
+#endif
 
     LOGF("Free heap: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
     LOGF("Free DMA heap: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_DMA));
@@ -178,6 +180,11 @@ IRAM_ATTR void emulate()
     // Emulation Loop
     while (true)
     {
+#if CONTROLLER_TYPE == CT_IO_EXPANDER
+        // Poll controller synchronously to avoid I2C bit-bang being interrupted by other tasks
+        nes.controller = controllerRead();
+#endif
+
         if (runtime_config.demo_mode)
         {
             static uint64_t emulator_start_time = esp_timer_get_time();
@@ -207,9 +214,15 @@ IRAM_ATTR void emulate()
 #ifndef COMPOSITE_VIDEO
             if (!ui.paused)
             {
+#if CONTROLLER_TYPE != CT_IO_EXPANDER
+                vTaskSuspend(polling_task_handle);
+#endif
                 vTaskSuspend(apu_task_handle);
                 ui.pauseMenu(&nes);
                 vTaskResume(apu_task_handle);
+#if CONTROLLER_TYPE != CT_IO_EXPANDER
+                vTaskResume(polling_task_handle);
+#endif
                 next_frame = esp_timer_get_time() + FRAME_TIME;
                 nes.controller = 0;
                 screen.setAddrWindow(32, 0, 256, 240);
