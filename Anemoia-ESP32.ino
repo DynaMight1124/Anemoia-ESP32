@@ -54,12 +54,7 @@ void setup()
     esp_bt_mem_release(ESP_BT_MODE_BTDM);
     esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
 
-    // Initialize microsd card
-    if (!initSD())
-        while (true);
-
     runtime_config = loadConfig();
-#ifndef COMPOSITE_VIDEO
     if (runtime_config.demo_mode)
     {
         if (reset_reason == ESP_RST_SW)
@@ -83,15 +78,8 @@ void setup()
         }
     }
 
-    if (runtime_config.backlight)
-    {
-        // Initialize backlight but keep it off
-        // Keeping the backlight off until the screen is drawn hides glitchy visuals
-        pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
-        ledcAttach(TFT_BACKLIGHT_PIN, BL_FREQ, BL_RESOLUTION);
-        ledcWrite(TFT_BACKLIGHT_PIN, 0); // backlight is off
-    }
-
+#ifndef COMPOSITE_VIDEO
+    if (runtime_config.backlight) initBacklight();
     setupI2SDAC();
 
     // Initialize TFT screen
@@ -104,9 +92,16 @@ void setup()
     screen.startWrite();
     screen.invertDisplay(runtime_config.invert);
 
-    ui.initializeSettings();
 #else
     initCompositeVideo();
+#endif
+
+    // Initialize microsd card
+    if (!initSD())
+        while (true);
+
+#ifndef COMPOSITE_VIDEO
+    ui.initializeSettings();
 #endif
 
     // Setup buttons
@@ -269,6 +264,15 @@ IRAM_ATTR void emulate()
 }
 #undef FRAME_TIME
 
+void initBacklight()
+{
+    // Initialize backlight but keep it off
+    // Keeping the backlight off until the screen is drawn hides glitchy visuals
+    pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
+    ledcAttach(TFT_BACKLIGHT_PIN, BL_FREQ, BL_RESOLUTION);
+    ledcWrite(TFT_BACKLIGHT_PIN, 0); // backlight is off
+}
+
 bool initSD()
 {
     LOG("Initializing SD...");
@@ -276,7 +280,7 @@ bool initSD()
     if (!SD.begin(SD_CS_PIN, SD_SPI, runtime_config.sd_freq * 1000000))
     {
         // Turn backlight on so error message can be seen
-        if (runtime_config.backlight) { ledcWrite(TFT_BACKLIGHT_PIN, 255); }
+        if (runtime_config.backlight) ledcWrite(TFT_BACKLIGHT_PIN, 255);
 
         LOG("SD Card Mount Failed");
 #ifndef COMPOSITE_VIDEO
