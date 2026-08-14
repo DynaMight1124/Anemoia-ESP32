@@ -1,5 +1,6 @@
 #include "cartridge.h"
 #include "bus.h"
+#include "ppu2C02.h"
 
 Cartridge::Cartridge(const char* filename, ROMBackend backend)
 {
@@ -24,7 +25,7 @@ Cartridge::Cartridge(const char* filename, ROMBackend backend)
     if (header.mapper1 & 0x04) rom.seek(rom.position() + 512);
 
     mapper_ID = (header.mapper2 & 0xF0) | header.mapper1 >> 4;
-    hardware_mirror = (header.mapper1 & 0x01) ? VERTICAL : HORIZONTAL;
+    hardware_mirror = (header.mapper1 & 0x01) ? MIRROR::VERTICAL : MIRROR::HORIZONTAL;
 
     uint8_t number_PRG_banks = 0;
     uint8_t number_CHR_banks = 0;
@@ -70,76 +71,6 @@ Cartridge::~Cartridge()
 {
 }
 
-bool Cartridge::cpuRead(uint16_t addr, uint8_t& data)
-{
-    switch (mapper_ID)
-    {
-    case 0: return mapper000_cpuRead(&mapper, addr, data);
-    case 1: return mapper001_cpuRead(&mapper, addr, data);
-    case 2: return mapper002_cpuRead(&mapper, addr, data);
-    case 3: return mapper003_cpuRead(&mapper, addr, data);
-    case 4: return mapper004_cpuRead(&mapper, addr, data);
-    case 69: return mapper069_cpuRead(&mapper, addr, data);
-    default: return false;
-    }
-}
-
-bool Cartridge::cpuWrite(uint16_t addr, uint8_t data)
-{
-    switch (mapper_ID)
-    {
-    case 0: return mapper000_cpuWrite(&mapper, addr, data);
-    case 1: return mapper001_cpuWrite(&mapper, addr, data);
-    case 2: return mapper002_cpuWrite(&mapper, addr, data);
-    case 3: return mapper003_cpuWrite(&mapper, addr, data);
-    case 4: return mapper004_cpuWrite(&mapper, addr, data);
-    case 69: return mapper069_cpuWrite(&mapper, addr, data);
-    default: return false;
-    }
-}
-
-bool Cartridge::ppuRead(uint16_t addr, uint8_t& data)
-{
-    switch (mapper_ID)
-    {
-    case 0: return mapper000_ppuRead(&mapper, addr, data);
-    case 1: return mapper001_ppuRead(&mapper, addr, data);
-    case 2: return mapper002_ppuRead(&mapper, addr, data);
-    case 3: return mapper003_ppuRead(&mapper, addr, data);
-    case 4: return mapper004_ppuRead(&mapper, addr, data);
-    case 69: return mapper069_ppuRead(&mapper, addr, data);
-    default: return false;
-    }
-}
-
-bool Cartridge::ppuWrite(uint16_t addr, uint8_t data)
-{
-    switch (mapper_ID)
-    {
-    case 0: return mapper000_ppuWrite(&mapper, addr, data);
-    case 1: return mapper001_ppuWrite(&mapper, addr, data);
-    case 2: return mapper002_ppuWrite(&mapper, addr, data);
-    case 3: return mapper003_ppuWrite(&mapper, addr, data);
-    case 4: return mapper004_ppuWrite(&mapper, addr, data);
-    case 69: return mapper069_ppuWrite(&mapper, addr, data);
-    default: return false;
-    }
-}
-
-uint8_t* Cartridge::ppuReadPtr(uint16_t addr)
-{
-    switch (mapper_ID)
-    {
-    case 0: return mapper000_ppuReadPtr(&mapper, addr);
-    case 1: return mapper001_ppuReadPtr(&mapper, addr);
-    case 2: return mapper002_ppuReadPtr(&mapper, addr);
-    case 3: return mapper003_ppuReadPtr(&mapper, addr);
-    case 4: return mapper004_ppuReadPtr(&mapper, addr);
-    case 69: return mapper069_ppuReadPtr(&mapper, addr);
-    default: return nullptr;
-    }
-}
-
 void Cartridge::ppuScanline()
 {
     switch (mapper_ID)
@@ -172,6 +103,34 @@ void Cartridge::reset()
     }
 }
 
+void Cartridge::mapPages(Bus* bus)
+{
+    switch (mapper_ID)
+    {
+    case 0: mapper000_mapPages(&mapper, bus); break;
+    case 1: mapper001_mapPages(&mapper, bus); break;
+    case 2: mapper002_mapPages(&mapper, bus); break;
+    case 3: mapper003_mapPages(&mapper, bus); break;
+    case 4: mapper004_mapPages(&mapper, bus); break;
+    case 69: mapper069_mapPages(&mapper, bus); break;
+    default: break;
+    }
+}
+
+void Cartridge::mapPPUPages(Ppu2C02* ppu)
+{
+    switch (mapper_ID)
+    {
+    case 0: mapper000_mapPPUPages(&mapper, ppu); break;
+    case 1: mapper001_mapPPUPages(&mapper, ppu); break;
+    case 2: mapper002_mapPPUPages(&mapper, ppu); break;
+    case 3: mapper003_mapPPUPages(&mapper, ppu); break;
+    case 4: mapper004_mapPPUPages(&mapper, ppu); break;
+    case 69: mapper069_mapPPUPages(&mapper, ppu); break;
+    default: break;
+    }
+}
+
 IRAM_ATTR void Cartridge::loadPRGBank(uint8_t* bank, uint16_t size, uint32_t offset)
 {
     rom.seek(prg_base + offset);
@@ -189,7 +148,7 @@ IRAM_ATTR void Cartridge::setMirrorMode(MIRROR mirror)
     bus->setPPUMirrorMode(mirror);
 }
 
-Cartridge::MIRROR Cartridge::getMirrorMode()
+MIRROR Cartridge::getMirrorMode()
 {
     return bus->getPPUMirrorMode();
 }
@@ -201,7 +160,6 @@ void Cartridge::IRQ()
 
 void Cartridge::dumpState(File& state)
 {
-    // mapper.vtable->dumpState(&mapper, state);
     switch (mapper_ID)
     {
     case 0: return mapper000_dumpState(&mapper, state);
@@ -216,7 +174,6 @@ void Cartridge::dumpState(File& state)
 
 void Cartridge::loadState(File& state)
 {
-    // mapper.vtable->loadState(&mapper, state);
     switch (mapper_ID)
     {
     case 0: return mapper000_loadState(&mapper, state);

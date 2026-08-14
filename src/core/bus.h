@@ -17,7 +17,6 @@ public:
     Bus();
     ~Bus();
 
-public:
     Cpu6502 cpu;
     Ppu2C02 ppu;
     Cartridge* cart;
@@ -26,8 +25,8 @@ public:
 
     void cpuWrite(uint16_t addr, uint8_t data);
     uint8_t cpuRead(uint16_t addr);
-    void setPPUMirrorMode(Cartridge::MIRROR mirror);
-    Cartridge::MIRROR getPPUMirrorMode();
+    void setPPUMirrorMode(MIRROR mirror);
+    MIRROR getPPUMirrorMode();
 
     void insertCartridge(Cartridge* cartridge);
     void connectScreen(TFT_eSPI* screen);
@@ -37,18 +36,29 @@ public:
     void IRQ();
     void NMI();
     void OAM_Write(uint8_t addr, uint8_t data);
-    uint16_t ppu_scanline = 0;
     void renderImage(uint16_t scanline);
 
     void saveState();
     void loadState();
+
+    static constexpr int PAGE_SIZE = 256;
+    static constexpr int NUM_PAGES = 0x10000 / PAGE_SIZE;
+
+    uint8_t* read_pages[NUM_PAGES] = {};
+    uint8_t* write_pages[NUM_PAGES] = {};
+
+    using ReadHandler = uint8_t (*)(Bus*, uint16_t);
+    using WriteHandler = void (*)(Bus*, uint16_t, uint8_t);
+    ReadHandler read_handlers[NUM_PAGES] = {};
+    WriteHandler write_handlers[NUM_PAGES] = {};
+
+    void buildPageTables();
 
 private:
     void cpuClock();
     TFT_eSPI* ptr_screen;
     uint8_t controller_state;
     uint8_t controller_strobe = 0x00;
-    bool frame_latch = false;
 };
 
 #endif

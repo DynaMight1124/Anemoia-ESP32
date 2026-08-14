@@ -13,6 +13,8 @@
 #include "mappers/mapper003.h"
 #include "mappers/mapper004.h"
 #include "mappers/mapper069.h"
+#include "mirror_mode.h"
+#include "ppu2C02.h"
 #include "rom_backends.h"
 
 class Bus;
@@ -22,28 +24,17 @@ public:
     Cartridge(const char* filename, ROMBackend backend = ROMBackend::LRU);
     ~Cartridge();
 
-    enum MIRROR : uint8_t
-    {
-        HORIZONTAL,
-        VERTICAL,
-        ONESCREEN_LOW,
-        ONESCREEN_HIGH,
-        HARDWARE
-    };
-
-    bool cpuRead(uint16_t addr, uint8_t& data);
-    bool cpuWrite(uint16_t addr, uint8_t data);
-    bool ppuRead(uint16_t addr, uint8_t& data);
-    uint8_t* ppuReadPtr(uint16_t addr);
-    bool ppuWrite(uint16_t addr, uint8_t data);
     void ppuScanline();
     void cpuCycle(int cycles);
     void reset();
 
+    void mapPages(Bus* bus);
+    void mapPPUPages(Ppu2C02* ppu);
+
     void loadPRGBank(uint8_t* bank, uint16_t size, uint32_t offset);
     void loadCHRBank(uint8_t* bank, uint16_t size, uint32_t offset);
     void setMirrorMode(MIRROR mirror);
-    Cartridge::MIRROR getMirrorMode();
+    MIRROR getMirrorMode();
     void connectBus(Bus* n)
     {
         bus = n;
@@ -57,10 +48,11 @@ public:
     void seek(uint32_t offset);
     void read(uint8_t* buf, size_t size);
 
-    uint8_t hardware_mirror;
-    uint8_t mirror = HORIZONTAL;
+    MIRROR hardware_mirror;
+    MIRROR mirror = MIRROR::HORIZONTAL;
     uint32_t CRC32 = ~0U;
     MappedROM mROM;
+    Mapper mapper;
 
 private:
     Bus* bus = nullptr;
@@ -69,7 +61,6 @@ private:
     uint32_t chr_base;
 
     File rom;
-    Mapper mapper;
     uint8_t mapper_ID = 0;
     void createMapper(uint8_t number_PRG_banks, uint8_t number_CHR_banks, ROMBackend backend);
     uint32_t crc32(const void* buf, size_t size, uint32_t seed = ~0U);
