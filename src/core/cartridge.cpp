@@ -73,6 +73,7 @@ Cartridge::~Cartridge()
 
 void Cartridge::ppuScanline()
 {
+    PROFILE_SCOPE(PROF_CART_PPU_SCANLINE);
     switch (mapper_ID)
     {
     case 4: return mapper004_scanline(&mapper);

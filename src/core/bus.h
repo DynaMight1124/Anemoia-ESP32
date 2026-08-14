@@ -2,6 +2,7 @@
 #define BUS_H
 
 #include "../debug.h"
+#include "../profiler.h"
 #include "cartridge.h"
 #include "config.h"
 #include "cpu6502.h"

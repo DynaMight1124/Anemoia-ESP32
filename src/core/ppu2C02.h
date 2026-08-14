@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "../../config.h"
+#include "../profiler.h"
 #include "cartridge.h"
 #include "mirror_mode.h"
 

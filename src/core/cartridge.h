@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../flash_mmap.h"
+#include "../profiler.h"
 #include "mapper.h"
 #include "mappers/mapper000.h"
 #include "mappers/mapper001.h"

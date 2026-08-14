@@ -14,6 +14,7 @@ Bus::~Bus()
 
 IRAM_ATTR void Bus::cpuWrite(uint16_t addr, uint8_t data)
 {
+    PROFILE_SCOPE(PROF_BUS_CPU_WRITE);
     if (uint8_t* p = write_pages[addr >> 8])
     {
         p[addr & 0xFF] = data;
@@ -24,6 +25,7 @@ IRAM_ATTR void Bus::cpuWrite(uint16_t addr, uint8_t data)
 
 IRAM_ATTR uint8_t Bus::cpuRead(uint16_t addr)
 {
+    PROFILE_SCOPE(PROF_BUS_CPU_READ);
     if (uint8_t* p = read_pages[addr >> 8]) return p[addr & 0xFF];
     return read_handlers[addr >> 8](this, addr);
 }
@@ -44,6 +46,7 @@ void Bus::reset()
 
 IRAM_ATTR void Bus::clock()
 {
+    PROFILE_SCOPE(PROF_BUS_CLOCK);
     // 1 frame == 341 dots * 261 scanlines
     // Visible scanlines 0-239
 
@@ -97,6 +100,7 @@ IRAM_ATTR void Bus::clock()
     cpu.clock(114);
     frame_latch = !frame_latch;
 #endif
+    profileReport(240);
 }
 
 IRAM_ATTR void Bus::setPPUMirrorMode(MIRROR mirror)
@@ -134,6 +138,7 @@ void Bus::connectFramebuffer(uint8_t* framebuffer)
 
 IRAM_ATTR void Bus::renderImage(uint16_t scanline)
 {
+    PROFILE_SCOPE(PROF_BUS_RENDER_IMAGE);
 #ifndef COMPOSITE_VIDEO
     #ifndef DISABLE_DMA
     ptr_screen->pushPixelsDMA(ppu.ptr_display, 256 * SCANLINES_PER_BUFFER);

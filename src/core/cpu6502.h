@@ -5,6 +5,7 @@
 #include <SD.h>
 #include <stdint.h>
 
+#include "../profiler.h"
 #include "apu2A03.h"
 #include "cartridge.h"
 

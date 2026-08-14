@@ -92,6 +92,7 @@
     #define I2S_DOUT_PIN             40 // Serial data output (DIN)
 
     // #define DEBUG // Uncomment this line if you want debug prints from serial
+    // #define ENABLE_PROFILING
 
 #endif
 

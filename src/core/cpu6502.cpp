@@ -28,6 +28,7 @@ inline void Cpu6502::write(uint16_t addr, uint8_t data)
 
 IRAM_ATTR void Cpu6502::OAM_DMA(uint8_t page)
 {
+    PROFILE_SCOPE(PROF_CPU_OAM_DMA);
     OAM_DMA_page = page << 8;
     for (int i = 0; i < 256; i++) { OAM_Write(i, read((OAM_DMA_page) | i)); }
 
@@ -41,6 +42,7 @@ IRAM_ATTR void Cpu6502::OAM_Write(uint8_t addr, uint8_t data)
 
 IRAM_ATTR void Cpu6502::clock(int i)
 {
+    PROFILE_SCOPE(PROF_CPU_CLOCK);
     uint8_t opcode = 0x00;
     uint8_t additional_cycle1, additional_cycle2;
     for (int remaining_cycles = i; remaining_cycles > 0; remaining_cycles--)
