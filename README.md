@@ -9,7 +9,7 @@
 <p align="center">
   Anemoia-ESP32 is a rewrite and port of the Anemoia Nintendo Entertainment System (NES) emulator running directly on the ESP32.
   It is written in C++ and is designed to bring classic NES games to the ESP32 with support for both TFT displays and composite video output.
-  This project focuses on performance, being able to run the emulator at native speeds and with full audio emulation and save states implemented.
+  This project focuses on performance, being able to run the emulator at native 60 FPS speeds and with full audio emulation and save states implemented with <u><strong>no frame skipping and no PSRAM required</strong></u>.
   <br/>
   <b>Flash the emulator instantly using the <a href="https://shim06.github.io/Anemoia-ESP32/" target="_blank">Web Flash</a>!</b>
   <br/>
@@ -63,7 +63,7 @@ Want to make a PCB? NextPCB offers PCB fabrication and assembly services with fa
 ---
 
 ## Performance
-Anemoia-ESP32 is heavily optimized to achieve native NES speeds on the ESP32, running at ~60.098 FPS (NTSC) with 1 frame skip and full audio emulation enabled.
+Anemoia-ESP32 is heavily optimized to achieve native NES speeds on the ESP32, running at ~60.098 FPS (NTSC) with full audio emulation enabled. On 80MHz-SPI-capable displays (e.g. ST7789), every frame is rendered with no frame skip. On 40MHz-SPI-capable displays (e.g. ILI9341), the emulator runs with 1 frame skip to keep display output from bottlenecking emulation speed.
 
 Here are the performance benchmarks for several popular NES games.
 > [!NOTE]
@@ -451,7 +451,13 @@ A full NES framebuffer at 256×240 pixels in 16-bit RGB eats 120 KB of RAM. That
 
 The problem with pushing constantly is that pushing data over SPI takes time, and that takes precious time from the processor for emulation. The fix is DMA. Instead of the CPU sitting there transferring bytes to the display, you hand it off to the DMA controller and let it run in the background. Resulting in very little overhead in pushing pixels to the display.
 
-The emulator also runs with a constant frame skip of 1. Every other frame gets skipped entirely. The emulation keeps running at full speed, only the display output is affected, and it's what gives the emulator enough headroom to stay stable across pretty much everything the NES throws at it.
+On displays limited to 40MHz SPI (e.g. ILI9341), the emulator also runs with a frame skip of 1. Every other frame is skipped, though emulation itself keeps running at full speed underneath. The emulator runs with 1 frame skip to keep display output from bottlenecking emulation speed. 80MHz-SPI displays (e.g. ST7789) have enough SPI bandwidth to push every frame and run without any skip.
+
+### O(1) Bus Dispatch
+
+When emulating memory-mapped hardware, every CPU and PPU memory access, every memory read and write, has to be routed to the right place: RAM, ROM, a PPU register, or cartridge mapper specific logic. The original approach checked a sequence of address ranges and, for cartridge space until it found a match. This is essentially O(n) in time complexity. Profiling showed this dispatch path alone consuming close to 40% of total CPU cycles.
+
+The fix replaces the range-walking and switch entirely with a 256-entry lookup table indexed by the top byte of the address. RAM, ROM, and banked cartridge regions resolve to a direct pointer dereference. Registers and mapper-specific behavior (bank switches, IRQ counters, PPU registers) resolve to a single indirect function-pointer call, selected in one array lookup instead of a chain of comparisons. Both resulting in O(1) time complexity.
 
 ### Scanline-Based PPU
 
