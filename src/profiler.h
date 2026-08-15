@@ -10,7 +10,7 @@
 enum ProfileTag : uint8_t
 {
     PROF_BUS_CLOCK = 0,
-    
+
     PROF_CPU_CLOCK,
     PROF_CPU_OAM_DMA,
 
