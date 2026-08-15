@@ -38,7 +38,7 @@ void profileReport(uint32_t frame_interval)
 
     uint64_t elapsed = g_profile[PROF_BUS_CLOCK].cycles;
     if (elapsed == 0) return;
-    
+
     LOG("==== Profiler (last interval) ====");
     for (int i = 0; i < PROF_COUNT; i++)
     {
