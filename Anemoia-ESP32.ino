@@ -2,16 +2,13 @@
 #include <SD.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
-#include <WiFi.h>
 #include <string>
 #include <vector>
 
 #include "config.h"
 #include "driver/i2s.h"
 #include "esp_bt.h"
-#include "esp_bt_main.h"
 #include "esp_task_wdt.h"
-#include "esp_wifi.h"
 #include "runtime_config.h"
 #include "src/composite_video.h"
 #include "src/controller.h"
@@ -46,15 +43,6 @@ void setup()
     log_pin_config();
     LOGF("ESP reset reason: %d\n", reset_reason);
 #endif
-
-    // Turn off Wifi and Bluetooth to reduce CPU overhead
-    WiFi.mode(WIFI_OFF);
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    btStop();
-    esp_bt_controller_disable();
-    esp_bt_mem_release(ESP_BT_MODE_BTDM);
-    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
 
     runtime_config = loadConfig();
     if (runtime_config.demo_mode)
