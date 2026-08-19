@@ -23,10 +23,6 @@ const char* const g_profile_names[PROF_COUNT] = {
     "bus::cpuWrite",
     "bus::renderImage",
 
-    "cart::cpuRead",
-    "cart::cpuWrite",
-    "cart::ppuRead",
-    "cart::ppuWrite",
     "cart::ppuScanline",
 };
 
