@@ -1,6 +1,10 @@
 #ifndef CONFIG_CYD_H
 #define CONFIG_CYD_H
 
+// Uncomment #define FRAMESKIP if you are using less than 80MHz display SPI frequency
+// This will skip displaying every other frame (effectively displaying 30 FPS)
+#define FRAMESKIP
+
 #include "src/ControllerTypes.h"
 // Controller Configuration
 // Because of the limited pins brought out by the CYD, it is only practical to use a
@@ -63,8 +67,8 @@
 // 0 = GPIO25, 1 = GPIO26
 #define DAC_PIN                  1
 
-#define FRAMESKIP
 // #define DEBUG // Uncomment this line if you want debug prints from serial
+// #define ENABLE_PROFILING
 
 // When DEMO_MODE_UNLOCKED is defined, if no user input is detected on the ROMs menu within five
 // seconds, then a random game is selected and shown for two minutes. Next the ESP32 is restarted,
