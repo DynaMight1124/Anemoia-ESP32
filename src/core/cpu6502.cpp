@@ -1,5 +1,4 @@
 #include "cpu6502.h"
-#include "bus.h"
 
 #define EXECUTE(addrmode, instruction)                                                             \
     {                                                                                              \
@@ -9,7 +8,9 @@
 
 Cpu6502::Cpu6502()
 {
+    bus.connectCPU(this);
     apu.connectCPU(this);
+    apu.connectBus(&bus);
 }
 
 Cpu6502::~Cpu6502()
@@ -18,26 +19,21 @@ Cpu6502::~Cpu6502()
 
 inline uint8_t Cpu6502::read(uint16_t addr)
 {
-    return bus->cpuRead(addr);
+    return bus.cpuRead(addr);
 }
 
 inline void Cpu6502::write(uint16_t addr, uint8_t data)
 {
-    bus->cpuWrite(addr, data);
+    bus.cpuWrite(addr, data);
 }
 
 IRAM_ATTR void Cpu6502::OAM_DMA(uint8_t page)
 {
     PROFILE_SCOPE(PROF_CPU_OAM_DMA);
     OAM_DMA_page = page << 8;
-    for (int i = 0; i < 256; i++) { OAM_Write(i, read((OAM_DMA_page) | i)); }
+    for (int i = 0; i < 256; i++) bus.ppu.ptr_sprite[i] = read((OAM_DMA_page) | i);
 
     cycles += 512;
-}
-
-IRAM_ATTR void Cpu6502::OAM_Write(uint8_t addr, uint8_t data)
-{
-    bus->OAM_Write(addr, data);
 }
 
 IRAM_ATTR void Cpu6502::clock(int i)
@@ -50,7 +46,7 @@ IRAM_ATTR void Cpu6502::clock(int i)
         if (cycles > 0)
         {
             cycles--;
-            cart->cpuCycle(1);
+            bus.cart->cpuCycle(1);
             continue;
         }
 
@@ -337,21 +333,83 @@ IRAM_ATTR void Cpu6502::clock(int i)
         if (remaining_cycles >= cycles)
         {
             remaining_cycles -= (cycles - 1);
-            cart->cpuCycle(cycles);
+            bus.cart->cpuCycle(cycles);
             cycles = 0;
             continue;
         }
         else
         {
             cycles -= remaining_cycles;
-            cart->cpuCycle(remaining_cycles);
+            bus.cart->cpuCycle(remaining_cycles);
             return;
         }
     }
 }
 
+IRAM_ATTR void Cpu6502::clockFrame()
+{
+    PROFILE_SCOPE(PROF_BUS_CLOCK);
+    // 1 frame == 341 dots * 261 scanlines
+    // Visible scanlines 0-239
+
+    // Rendering 3 scanlines at a time because 1 CPU clock == 3 PPU clocks
+    // and there's only 341 ppu clocks (dots) in a scanline, which is not divisible by 3.
+    // Using a counter/for loop with += 341 & -= 3 is too big of a performance hit.
+    // 1 scanline == ~113.67 CPU clocks, so for every 3 scanlines, two scanlines will have an extra
+    // CPU clock
+#ifndef FRAMESKIP
+    for (int ppu_scanline = 0; ppu_scanline < 240; ppu_scanline += 3)
+    {
+        clock(113);
+        bus.ppu.renderScanline(ppu_scanline);
+
+        clock(114);
+        bus.ppu.renderScanline(ppu_scanline + 1);
+
+        clock(114);
+        bus.ppu.renderScanline(ppu_scanline + 2);
+    }
+
+    // Setup for the next frame
+    // Same reason as scanlines 0-239, 2/3 of scanlines will have an extra CPU clock.
+    // Scanline 240
+    clock(113);
+
+    // Scanline 241-261
+    bus.ppu.setVBlank();
+    clock(2501);
+
+    bus.ppu.clearVBlank();
+    clock(114);
+#else
+    static bool frame_latch = false;
+    for (int ppu_scanline = 0; ppu_scanline < 240; ppu_scanline += 3)
+    {
+        clock(113);
+        if (frame_latch) bus.ppu.fakeSpriteHit(ppu_scanline);
+        else bus.ppu.renderScanline(ppu_scanline);
+        clock(114);
+        if (frame_latch) bus.ppu.fakeSpriteHit(ppu_scanline + 1);
+        else bus.ppu.renderScanline(ppu_scanline + 1);
+        clock(114);
+        if (frame_latch) bus.ppu.fakeSpriteHit(ppu_scanline + 2);
+        else bus.ppu.renderScanline(ppu_scanline + 2);
+    }
+    clock(113);
+    bus.ppu.setVBlank();
+    clock(2501);
+    bus.ppu.clearVBlank();
+    clock(114);
+    frame_latch = !frame_latch;
+#endif
+    profileReport(240);
+}
+
 void Cpu6502::reset()
 {
+    bus.reset();
+    apu.reset();
+
     addr_abs = 0xFFFC;
     uint8_t low_byte = read(addr_abs);
     uint8_t high_byte = read(addr_abs + 1);
@@ -368,7 +426,6 @@ void Cpu6502::reset()
     fetched = 0x00;
 
     cycles = 8;
-    apu.reset();
 }
 
 IRAM_ATTR void Cpu6502::apuWrite(uint16_t addr, uint8_t data)

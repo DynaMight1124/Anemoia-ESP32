@@ -5,24 +5,28 @@
 #include "../profiler.h"
 #include "cartridge.h"
 #include "config.h"
-#include "cpu6502.h"
 #include "ppu2C02.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <stdint.h>
 #include <stdio.h>
 
+class Cpu6502;
 class Bus
 {
 public:
     Bus();
     ~Bus();
 
-    Cpu6502 cpu;
+public:
     Ppu2C02 ppu;
+    Cpu6502* cpu;
     Cartridge* cart;
     uint8_t RAM[2048];
     uint8_t controller = 0x00;
+
+    void setController(uint8_t state);
+    uint8_t getControllerState();
 
     void cpuWrite(uint16_t addr, uint8_t data);
     uint8_t cpuRead(uint16_t addr);
@@ -30,21 +34,13 @@ public:
     MIRROR getPPUMirrorMode();
 
     void insertCartridge(Cartridge* cartridge);
-    void connectScreen(TFT_eSPI* screen);
-    void connectFramebuffer(uint8_t* framebuffer);
+    void connectCPU(Cpu6502* n);
     void reset();
-    void clock();
     void IRQ();
     void NMI();
-    void OAM_Write(uint8_t addr, uint8_t data);
-    void renderImage(uint16_t scanline);
-
-    void saveState();
-    void loadState();
 
     static constexpr int PAGE_SIZE = 256;
     static constexpr int NUM_PAGES = 0x10000 / PAGE_SIZE;
-
     uint8_t* read_pages[NUM_PAGES] = {};
     uint8_t* write_pages[NUM_PAGES] = {};
 
@@ -56,7 +52,6 @@ public:
     void buildPageTables();
 
 private:
-    void cpuClock();
     TFT_eSPI* ptr_screen;
     uint8_t controller_state;
     uint8_t controller_strobe = 0x00;

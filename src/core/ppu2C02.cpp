@@ -526,7 +526,8 @@ inline void Ppu2C02::finishScanline()
         ptr_display = ptr_back_buffer;
         ptr_back_buffer = temp;
     #endif
-        bus->renderImage(scanline - (SCANLINES_PER_BUFFER - 1));
+        static constexpr uint32_t size = SCANLINE_SIZE * SCANLINES_PER_BUFFER * sizeof(uint16_t);
+        if (draw_callback) draw_callback((uint8_t*)ptr_display, size);
         scanline_counter = 0;
     }
 #else

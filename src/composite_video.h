@@ -24,7 +24,6 @@
 
 #include "../config.h"
 #include "controller.h"
-#include "core/bus.h"
 #include "core/cartridge.h"
 #include "core/rom_backends.h"
 #include "driver/dac.h"
@@ -36,6 +35,7 @@
 #include "esp_heap_caps.h"
 #include "esp_intr_alloc.h"
 #include "esp_types.h"
+#include "nes.h"
 #include "rom/gpio.h"
 #include "rom/lldesc.h"
 #include "soc/efuse_periph.h"
@@ -1018,7 +1018,7 @@ Cartridge* cv_selectGame()
 }
 
 bool cv_paused = false;
-void cv_pauseMenu(Bus* nes)
+void cv_pauseMenu(Nes* nes)
 {
     int prev_select = 0;
     int select = 0;

@@ -233,7 +233,7 @@ void UI::drawBars()
     screen->print(" Select");
 }
 
-void UI::pauseMenu(Bus* nes)
+void UI::pauseMenu(Nes* nes)
 {
     // Black magic stuff
     // Padding bytes for code alignment for better performance
@@ -407,7 +407,7 @@ void UI::pauseMenu(Bus* nes)
     }
 }
 
-void UI::settingsMenu(Bus* nes)
+void UI::settingsMenu(Nes* nes)
 {
     // Draw settings window
 
@@ -614,10 +614,10 @@ void UI::initializeSettings()
     // backlight in the main code to hide glitchy visuals when drawing the screen
 }
 
-void UI::loadEmulatorSettings(Bus* nes)
+void UI::loadEmulatorSettings(Nes* nes)
 {
-    nes->ppu.setPalette(settings.palette);
-    nes->cpu.apu.setVolume(settings.volume);
+    nes->setPalette(settings.palette);
+    nes->setVolume(settings.volume);
 }
 
 void UI::restoreBrightness()

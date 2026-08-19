@@ -12,8 +12,8 @@
 #include "runtime_config.h"
 #include "src/composite_video.h"
 #include "src/controller.h"
-#include "src/core/bus.h"
 #include "src/debug.h"
+#include "src/nes.h"
 #include "src/ui.h"
 
 RuntimeConfig runtime_config;
@@ -23,7 +23,7 @@ TFT_eSPI screen = TFT_eSPI();
 UI ui(&screen);
 #endif
 
-static Bus nes;
+static Nes nes;
 Cartridge* cart;
 
 RTC_NOINIT_ATTR bool demo_mode_reset;
@@ -129,6 +129,7 @@ IRAM_ATTR void emulate()
     screen.setAddrWindow(32, 0, 256, 240);
 #endif
     nes.insertCartridge(cart);
+    LOG("Cartridge inserted");
     nes.reset();
 
     TaskHandle_t apu_task_handle;
@@ -166,7 +167,7 @@ IRAM_ATTR void emulate()
         if (runtime_config.demo_mode)
         {
             static uint64_t emulator_start_time = esp_timer_get_time();
-            if (nes.controller)
+            if (nes.getControllerState())
             {
                 // disable demo mode so user is not interrupted by demo time limit ending
                 demo_mode_active = false;
@@ -186,8 +187,8 @@ IRAM_ATTR void emulate()
         }
 
         // Start + Select opens the pause menu
-        if ((nes.controller & (uint8_t)CONTROLLER::Start) &&
-            (nes.controller & (uint8_t)CONTROLLER::Select))
+        if ((nes.getControllerState() & (uint8_t)CONTROLLER::Start) &&
+            (nes.getControllerState() & (uint8_t)CONTROLLER::Select))
         {
 #ifndef COMPOSITE_VIDEO
             if (!ui.paused)
@@ -196,7 +197,7 @@ IRAM_ATTR void emulate()
                 ui.pauseMenu(&nes);
                 vTaskResume(apu_task_handle);
                 next_frame = esp_timer_get_time() + FRAME_TIME;
-                nes.controller = 0;
+                nes.setController(0);
                 screen.setAddrWindow(32, 0, 256, 240);
             }
 #else
@@ -206,13 +207,13 @@ IRAM_ATTR void emulate()
                 cv_pauseMenu(&nes);
                 vTaskResume(apu_task_handle);
                 next_frame = esp_timer_get_time() + FRAME_TIME;
-                nes.controller = 0;
+                nes.setController(0);
             }
 #endif
         }
 
         // Generate one frame
-        nes.clock();
+        nes.clockFrame();
 
 #ifdef DEBUG
         current_frame_time = esp_timer_get_time();
@@ -365,14 +366,14 @@ void apuTask(void* param)
 
 void pollingTask(void* param)
 {
-    Bus* nes = (Bus*)param;
+    Nes* nes = (Nes*)param;
     const TickType_t frameTicks = pdMS_TO_TICKS(1000 / 60);
     TickType_t lastWakeTime = xTaskGetTickCount();
 
     while (true)
     {
         // Read button input
-        nes->controller = controllerRead();
+        nes->setController(controllerRead());
 
         vTaskDelayUntil(&lastWakeTime, frameTicks);
     }
