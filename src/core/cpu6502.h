@@ -5,14 +5,15 @@
 #include <SD.h>
 #include <stdint.h>
 
+#include "../profiler.h"
 #include "apu2A03.h"
+#include "bus.h"
 #include "cartridge.h"
 
 #define GET_FLAG(f)    ((status & (f)) != 0)
 #define SET_FLAG(f, v) (status = (v) ? (status | (f)) : (status & ~(f)))
 #define SET_ZN(v)      (status = ((status & ~(Z | N)) | zn_table[(v)]))
 
-class Bus;
 class Cpu6502
 {
 public:
@@ -20,8 +21,6 @@ public:
     ~Cpu6502();
 
 public:
-    Apu2A03 apu;
-
     // Status Register Flags
     enum FLAGS : uint8_t
     {
@@ -35,9 +34,8 @@ public:
         N = (1 << 7)  // Negative Bit
     };
 
+    void clockFrame();
     void apuWrite(uint16_t addr, uint8_t data);
-    uint8_t apuRead(uint16_t addr);
-    void clock(int i);
     void OAM_DMA(uint8_t page);
     void reset();
 
@@ -46,15 +44,6 @@ public:
 
     void dumpState(File& state);
     void loadState(File& state);
-
-    void connectBus(Bus* n)
-    {
-        bus = n;
-    }
-    void connectCartridge(Cartridge* cartridge)
-    {
-        cart = cartridge;
-    }
 
     // Registers
     uint8_t A = 0x00;      // Accumulator
@@ -69,12 +58,14 @@ public:
     uint16_t addr_rel = 0x0000;
     int cycles = 0;
 
+    Bus bus;
+    Apu2A03 apu;
+
 private:
-    Cartridge* __restrict cart = nullptr;
-    Bus* __restrict bus = nullptr;
     bool addrmode_implied = false;
     uint8_t fetch();
     uint8_t fast_fetch();
+    void clock(int i);
     uint8_t read(uint16_t addr);
     void write(uint16_t addr, uint8_t data);
     void OAM_Write(uint8_t addr, uint8_t data);

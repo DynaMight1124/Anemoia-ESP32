@@ -48,6 +48,7 @@ Ppu2C02::~Ppu2C02()
 
 inline void Ppu2C02::ppuWrite(uint16_t addr, uint8_t data)
 {
+    PROFILE_SCOPE(PROF_PPU_PPU_WRITE);
     addr &= 0x3FFF;
     if (uint8_t* p = ppu_write_pages[addr >> 8])
     {
@@ -59,6 +60,8 @@ inline void Ppu2C02::ppuWrite(uint16_t addr, uint8_t data)
 
 inline uint8_t Ppu2C02::ppuRead(uint16_t addr)
 {
+    PROFILE_SCOPE(PROF_PPU_PPU_READ);
+    uint8_t data = 0x00;
     addr &= 0x3FFF;
     if (uint8_t* p = ppu_read_pages[addr >> 8]) return p[addr & 0xFF];
     return ppu_read_handlers[addr >> 8](this, addr);
@@ -73,6 +76,7 @@ inline uint8_t* Ppu2C02::ppuReadPtr(uint16_t addr)
 
 IRAM_ATTR void Ppu2C02::cpuWrite(uint16_t addr, uint8_t data)
 {
+    PROFILE_SCOPE(PROF_PPU_CPU_WRITE);
     switch (addr)
     {
     case 0x0000: // PPUCTRL
@@ -121,6 +125,7 @@ IRAM_ATTR void Ppu2C02::cpuWrite(uint16_t addr, uint8_t data)
 
 IRAM_ATTR uint8_t Ppu2C02::cpuRead(uint16_t addr)
 {
+    PROFILE_SCOPE(PROF_PPU_CPU_READ);
     uint8_t data = 0x00;
     switch (addr)
     {
@@ -195,6 +200,7 @@ inline void Ppu2C02::incrementY()
 
 inline void Ppu2C02::renderBackground()
 {
+    PROFILE_SCOPE(PROF_PPU_RENDER_BG);
     // Show transparency pixel if not rendering background
     if (!mask.render_background)
     {
@@ -281,6 +287,7 @@ inline void Ppu2C02::renderBackground()
 
 inline void Ppu2C02::renderSprites()
 {
+    PROFILE_SCOPE(PROF_PPU_RENDER_SPRITES);
     if (!mask.render_sprite) { return; }
 
     OAM* ptr_sprite_OAM;
@@ -418,6 +425,7 @@ inline void Ppu2C02::renderSprites()
 
 void Ppu2C02::fakeSpriteHit(uint16_t current_scanline)
 {
+    PROFILE_SCOPE(PROF_PPU_FAKE_SPRITE);
     if (mask.render_background || mask.render_sprite) cart->ppuScanline();
     if (!mask.render_sprite || status.sprite_zero_hit) return;
 
@@ -497,6 +505,7 @@ void Ppu2C02::fakeSpriteHit(uint16_t current_scanline)
 
 inline void Ppu2C02::finishScanline()
 {
+    PROFILE_SCOPE(PROF_PPU_FINISH_SCANLINE);
     if (mask.render_background || mask.render_sprite) cart->ppuScanline();
 
 // Transfer internal scanline buffer to display buffer
@@ -507,7 +516,7 @@ inline void Ppu2C02::finishScanline()
     uint16_t* display = ptr_display + ((uint32_t)scanline_counter * SCANLINE_SIZE);
     #endif
     uint8_t* buffer = ptr_buffer;
-    for (int i = 0; i < SCANLINE_SIZE; i++) display[i] = palette_NTSC565[0][buffer[i]];
+    for (int i = 0; i < SCANLINE_SIZE; i++) display[i] = nes_palette[mask.emphasize][buffer[i]];
 
     scanline_counter++;
     if (scanline_counter >= SCANLINES_PER_BUFFER)
@@ -517,7 +526,8 @@ inline void Ppu2C02::finishScanline()
         ptr_display = ptr_back_buffer;
         ptr_back_buffer = temp;
     #endif
-        bus->renderImage(scanline - (SCANLINES_PER_BUFFER - 1));
+        static constexpr uint32_t size = SCANLINE_SIZE * SCANLINES_PER_BUFFER * sizeof(uint16_t);
+        if (draw_callback) draw_callback((uint8_t*)ptr_display, size);
         scanline_counter = 0;
     }
 #else

@@ -1,6 +1,10 @@
 #ifndef CONFIG_MODULE_H
 #define CONFIG_MODULE_H
 
+// Uncomment #define FRAMESKIP if you are using less than 80MHz display SPI frequency
+// This will skip displaying every other frame (effectively displaying 30 FPS)
+// #define FRAMESKIP
+
 #include "src/ControllerTypes.h"
 // Controller Configuration
 #define CONTROLLER_TYPE   CT_GPIO
@@ -63,7 +67,7 @@
 // 0 = GPIO25, 1 = GPIO26
 #define DAC_PIN                  1
 
-#define FRAMESKIP
 // #define DEBUG // Uncomment this line if you want debug prints from serial
+// #define ENABLE_PROFILING
 
 #endif

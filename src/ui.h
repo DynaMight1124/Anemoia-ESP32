@@ -5,8 +5,8 @@
 #include <TFT_eSPI.h>
 
 #include "controller.h"
-#include "core/bus.h"
 #include "core/rom_backends.h"
+#include "nes.h"
 #include "runtime_config.h"
 
 #define BL_CHANNEL    0
@@ -36,11 +36,11 @@ public:
     UI(TFT_eSPI* screen);
     ~UI();
     Cartridge* selectGame();
-    void pauseMenu(Bus* nes);
-    void settingsMenu(Bus* nes);
+    void pauseMenu(Nes* nes);
+    void settingsMenu(Nes* nes);
 
     void initializeSettings();
-    void loadEmulatorSettings(Bus* nes);
+    void loadEmulatorSettings(Nes* nes);
     void restoreBrightness();
     bool paused = false;
 
